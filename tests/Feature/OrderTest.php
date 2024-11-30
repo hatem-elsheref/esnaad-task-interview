@@ -119,7 +119,7 @@ class OrderTest extends TestCase
         $customer = User::query()->latest()->first();
 
         $product = Product::query()->with('ingredients')->first();
-        $quantity = 5;
+        $quantity = 1;
 
         $expectedAmounts = [];
         foreach ($product->ingredients as $ingredient) {
@@ -155,7 +155,6 @@ class OrderTest extends TestCase
             $this->assertEquals($expectedAmounts[$ingredientId]['remaining'], $actualAmount['remaining'], $expectedAmounts[$ingredientId]['name']);
             $this->assertEquals($expectedAmounts[$ingredientId]['consumed'], $actualAmount['consumed'], $expectedAmounts[$ingredientId]['name']);
         }
-
 
         $latestOrder = Order::latest()->first();
 

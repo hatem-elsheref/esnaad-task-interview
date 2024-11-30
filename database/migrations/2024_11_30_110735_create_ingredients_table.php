@@ -19,7 +19,6 @@ return new class extends Migration
             $table->integer('consumed_quantity')->default(0);
             $table->integer('remaining_quantity')->default(0);
             $table->boolean('is_notified')->default(false);
-            $table->integer('version')->default(1);
             $table->timestamps();
         });
     }

@@ -179,25 +179,12 @@ class OrderService
                 throw new Exception("Ingredient $ingredient->name not found.");
             }
 
-            $currentVersion = $ingredient->version;
-
             if ($ingredient->remaining_quantity < $amountToDeduct) {
-                throw new Exception('Insufficient amount in stock.');
+                throw new Exception("Insufficient amount in stock of $ingredient->name.");
             }
 
-            $ingredientState = Ingredient::query()->where('id', $ingredient->id)
-                ->where('version', $currentVersion)
-                ->update([
-                    'consumed_quantity'  => $ingredient->consumed_quantity + $amountToDeduct,
-                    'remaining_quantity' => $ingredient->stock_quantity - ($ingredient->consumed_quantity + $amountToDeduct),
-                    'version'            => $currentVersion + 1,
-                ]);
-
-            if ($ingredientState === 0) {
-                throw new Exception('Version conflict detected. Retrying...');
-            }
-
-            $ingredient = $ingredient->fresh();
+            $ingredient->decrement('remaining_quantity', $amountToDeduct);
+            $ingredient->increment('consumed_quantity', $amountToDeduct);
 
             $minLimitPercentage = min(100, max(0, config('esnaad.min_stock', 50))) / 100;
 

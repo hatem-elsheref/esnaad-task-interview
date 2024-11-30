@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Ingredient extends Model
 {
-    protected $fillable = ['merchant_id', 'name', 'stock_quantity', 'consumed_quantity', 'remaining_quantity', 'is_notified', 'version'];
+    protected $fillable = ['merchant_id', 'name', 'stock_quantity', 'consumed_quantity', 'remaining_quantity', 'is_notified'];
 
     public function merchant(): BelongsTo
     {
