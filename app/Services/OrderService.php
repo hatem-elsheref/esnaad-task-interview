@@ -10,6 +10,7 @@ use App\Models\Product;
 use Exception;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Response;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -17,6 +18,12 @@ class OrderService
 {
     const MAX_RETRIES = 3;
 
+    private function myOrders($request): LengthAwarePaginator
+    {
+        return Order::query()
+            ->with('items.product')
+            ->paginate(10);
+    }
     public function process($request) :array
     {
         try {
@@ -27,7 +34,7 @@ class OrderService
             DB::beginTransaction();
 
             foreach ($request->products as $productArray) {
-                $product = Product::query()->with('ingredients')->find($productArray['product_id']);
+                $product = Product::query()->select('id', 'name', 'price')->with('ingredients')->find($productArray['product_id']);
 
                 $quantity = $productArray['quantity'];
 
@@ -96,7 +103,7 @@ class OrderService
                 DB::beginTransaction();
 
                 foreach ($request->products as $productArray) {
-                    $product = Product::query()->with('ingredients')->find($productArray['product_id']);
+                    $product = Product::query()->select('id', 'name', 'price')->with('ingredients')->find($productArray['product_id']);
 
                     $quantity = $productArray['quantity'];
 
@@ -161,7 +168,9 @@ class OrderService
         try {
             $amountToDeduct = $productIngredient->pivot->amount * $quantity;
 
-            $ingredient = Ingredient::query()->where('id', $productIngredient->id)->lockForUpdate()->first();
+            $ingredient = Ingredient::query()
+                ->select('id', 'name', 'merchant_id', 'stock_quantity', 'consumed_quantity', 'remaining_quantity', 'is_notified')
+                ->where('id', $productIngredient->id)->lockForUpdate()->first();
 
             if (!$ingredient) {
                 throw new Exception("Ingredient $ingredient->name not found.");
