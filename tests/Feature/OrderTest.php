@@ -5,6 +5,7 @@ namespace Tests\Feature;
 // use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Enums\Role;
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -13,7 +14,7 @@ use Tests\TestCase;
 
 class OrderTest extends TestCase
 {
-   // use DatabaseTransactions;
+   //use DatabaseTransactions;
     const API_URL = 'http://127.0.0.1:8000/api/v1/';
     /**
      * A basic test example.
@@ -95,11 +96,7 @@ class OrderTest extends TestCase
     }
     public function test_creating_order_with_valid_product_payload_and_sufficient_quantities(): void
     {
-        $customer = User::factory()->create([
-            'name'  => 'John Doe',
-            'email' => 'john-'.time().'@doe.com',
-            'role'  => Role::Customer
-        ]);
+        $customer = User::query()->latest()->first();
 
         $response = $this->actingAs($customer)->post(self::API_URL . 'orders', [
             'products' => [
@@ -119,37 +116,45 @@ class OrderTest extends TestCase
 
     public function test_creating_order_with_sufficient_quantities_and_deducting_ingredients(): void
     {
-        $token = sprintf('Bearer 38|YehsiPUfevM3nd83bG2wpqvAJVfx7VtrGvvW0jlF2a7a586d');
+        $customer = User::query()->latest()->first();
 
-        $payload = ['products' => [ 'product_id' => 1, 'quantity'   => 5]];
+        $product = Product::query()->with('ingredients')->first();
+        $quantity = 5;
 
-        $responses = Http::pool(function ($pool) use ($token, $payload) {
-           $pool->withHeaders(['Content-Type' => 'application/json', 'Authorization' => $token])->post(self::API_URL . 'orders', $payload);
-           $pool->withHeaders(['Content-Type' => 'application/json', 'Authorization' => $token])->post(self::API_URL . 'orders', $payload);
-           $pool->withHeaders(['Content-Type' => 'application/json', 'Authorization' => $token])->post(self::API_URL . 'orders', $payload);
-           $pool->withHeaders(['Content-Type' => 'application/json', 'Authorization' => $token])->post(self::API_URL . 'orders', $payload);
-           $pool->withHeaders(['Content-Type' => 'application/json', 'Authorization' => $token])->post(self::API_URL . 'orders', $payload);
-           $pool->withHeaders(['Content-Type' => 'application/json', 'Authorization' => $token])->post(self::API_URL . 'orders', $payload);
-           $pool->withHeaders(['Content-Type' => 'application/json', 'Authorization' => $token])->post(self::API_URL . 'orders', $payload);
-           $pool->withHeaders(['Content-Type' => 'application/json', 'Authorization' => $token])->post(self::API_URL . 'orders', $payload);
-           $pool->withHeaders(['Content-Type' => 'application/json', 'Authorization' => $token])->post(self::API_URL . 'orders', $payload);
-           $pool->withHeaders(['Content-Type' => 'application/json', 'Authorization' => $token])->post(self::API_URL . 'orders', $payload);
-        });
-
-        $statuses = [];
-        foreach ($responses as $response){
-            $statuses[] = $response->json();
+        $expectedAmounts = [];
+        foreach ($product->ingredients as $ingredient) {
+            $expectedAmounts[$ingredient->id] = [
+                'name'       =>  $ingredient->name,
+                'total'      =>  $ingredient->stock_quantity,
+                'remaining'  =>  $ingredient->remaining_quantity - ((float) $ingredient->pivot->amount * $quantity),
+                'consumed'   =>  $ingredient->consumed_quantity + ((float) $ingredient->pivot->amount * $quantity),
+            ];
         }
 
-        dd($statuses);
         $response = $this->actingAs($customer)->post(self::API_URL . 'orders', [
             'products' => [
                 [
-                    'product_id' => 1,
-                    'quantity'   => 5,
+                    'product_id' => $product->id,
+                    'quantity'   => $quantity,
                 ]
             ]
         ]);
+
+        $product = Product::query()->with('ingredients')->first();
+
+        $actualAmounts = [];
+        foreach ($product->ingredients as $ingredient) {
+            $actualAmounts[$ingredient->id] = [
+                'total'      =>  $ingredient->stock_quantity,
+                'remaining'  =>  $ingredient->remaining_quantity,
+                'consumed'   =>  $ingredient->consumed_quantity,
+            ];
+        }
+
+        foreach ($actualAmounts as $ingredientId => $actualAmount) {
+            $this->assertEquals($expectedAmounts[$ingredientId]['remaining'], $actualAmount['remaining'], $expectedAmounts[$ingredientId]['name']);
+            $this->assertEquals($expectedAmounts[$ingredientId]['consumed'], $actualAmount['consumed'], $expectedAmounts[$ingredientId]['name']);
+        }
 
 
         $latestOrder = Order::latest()->first();
