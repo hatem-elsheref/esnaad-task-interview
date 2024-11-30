@@ -180,16 +180,16 @@ class OrderService
                 ChangingInIngredientAmount::dispatch($ingredient);
             }
 
+            return true;
         }catch (Exception $exception) {
             Log::error('Failed to deduct ingredient ', [
                 'id'   => $ingredient->id,
                 'name' => $ingredient->name,
                 'reason' => $exception->getMessage(),
             ]);
+
             return false;
         }
-
-        return true;
     }
 
     private function createOrder($total, $items) :Model|Order|null
