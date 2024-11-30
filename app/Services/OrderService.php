@@ -20,7 +20,8 @@ class OrderService
 
     public function myOrders($request): array
     {
-        $orders = Order::query()->with('items.product')->paginate(10);
+        $orders = Order::query()->with('items.product')
+            ->latest('id')->paginate(10);
 
         return ['data' => $orders, 'status' => Response::HTTP_OK];
     }
