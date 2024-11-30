@@ -181,6 +181,10 @@ class OrderService
                     'version'            => $currentVersion + 1,
                 ]);
 
+            if ($ingredientState === 0) {
+                throw new Exception('Version conflict detected. Retrying...');
+            }
+
             $ingredient = $ingredient->fresh();
 
             $minLimitPercentage = min(100, max(0, config('esnaad.min_stock', 50))) / 100;
@@ -188,10 +192,13 @@ class OrderService
             if (!$ingredient->is_notified && ($ingredient->remaining_quantity < ($ingredient->stock_quantity * $minLimitPercentage))){
                 ChangingInIngredientAmount::dispatch($ingredient);
             }
-            if ($ingredientState === 0) {
-                throw new Exception('Version conflict detected. Retrying...');
-            }
+
         }catch (Exception $exception) {
+            Log::error('Failed to deduct ingredient ', [
+                'name' => $ingredient->name,
+                'id'   => $ingredient->id,
+                'reason' => $exception->getMessage(),
+            ]);
             return false;
         }
 
