@@ -18,11 +18,11 @@ class OrderService
 {
     const MAX_RETRIES = 3;
 
-    private function myOrders($request): LengthAwarePaginator
+    public function myOrders($request): array
     {
-        return Order::query()
-            ->with('items.product')
-            ->paginate(10);
+        $orders = Order::query()->with('items.product')->paginate(10);
+
+        return ['data' => $orders, 'status' => Response::HTTP_OK];
     }
     public function process($request) :array
     {
