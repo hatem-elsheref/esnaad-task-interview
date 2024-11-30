@@ -35,8 +35,9 @@ class DevelopmentSeeder extends Seeder
         $burgerIngredientsItems = [];
         foreach ($ingredients as $ingredient => $stock) {
             $item = Ingredient::query()->create([
-                'name'           => $ingredient,
-                'stock_quantity' => $stock * 1000
+                'merchant_id'        => 1,
+                'name'               => $ingredient,
+                'stock_quantity'     => $stock * 1000,
             ]);
 
             $burgerIngredientsItems[$item->id] = ['amount' => $burgerIngredients[$ingredient]];
