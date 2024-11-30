@@ -14,6 +14,10 @@ class LoginController
             $user = Auth::user();
             return response()->json([
                 'success' => true,
+                'user'    => [
+                    'id' => $user->id,
+                    'name' => $user->name
+                ],
                 'token'   => $user->createToken('api-app')->plainTextToken,
             ]);
         }

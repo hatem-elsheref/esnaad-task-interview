@@ -75,10 +75,17 @@ class OrderService
             }catch (Exception $exception) {
                 DB::rollBack();
                 $attempts += 1;
+
+                // we can wait here some micro seconds
             }
         } while ($attempts <= self::MAX_RETRIES);
 
-        Log::error('Failed to create order ', $request->all());
+        Log::error('Failed to create order ', [
+            'reason'   => $exception->getMessage(),
+            'payload'  => [
+                'products' => $request->products,
+            ]
+        ]);
 
         return [
             'status'   => Response::HTTP_BAD_REQUEST,
@@ -142,7 +149,12 @@ class OrderService
                 ],
             ];
         }catch (Exception $exception) {
-            Log::error('Failed to create order ', $request->all());
+            Log::error('Failed to create order ', [
+                'reason'   => $exception->getMessage(),
+                'payload'  => [
+                    'products' => $request->products,
+                ]
+            ]);
 
             DB::rollBack();
         }
@@ -195,8 +207,8 @@ class OrderService
 
         }catch (Exception $exception) {
             Log::error('Failed to deduct ingredient ', [
-                'name' => $ingredient->name,
                 'id'   => $ingredient->id,
+                'name' => $ingredient->name,
                 'reason' => $exception->getMessage(),
             ]);
             return false;
