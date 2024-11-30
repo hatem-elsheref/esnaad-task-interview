@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 // use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Enums\Role;
+use App\Models\Ingredient;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
@@ -14,8 +15,8 @@ use Tests\TestCase;
 
 class OrderTest extends TestCase
 {
-   //use DatabaseTransactions;
-    const API_URL = 'http://127.0.0.1:8000/api/v1/';
+  // use DatabaseTransactions;
+    const API_URL = '/api/v1/';
     /**
      * A basic test example.
      */
@@ -50,11 +51,7 @@ class OrderTest extends TestCase
     }
     public function test_creating_order_with_invalid_product_payload(): void
     {
-        $customer = User::factory()->create([
-            'name'  => 'John Doe',
-            'email' => 'john-'.time().'@doe.com',
-            'role'  => Role::Customer
-        ]);
+        $customer = User::query()->latest()->first();
 
         $response = $this->actingAs($customer)->post(self::API_URL . 'orders', [
             'products' => [
@@ -86,7 +83,7 @@ class OrderTest extends TestCase
                     'quantity'   => 1,
                 ],
                 [
-                    'product_id' => 3,
+                    'product_id' => 10000000000,
                     'quantity'   => 1,
                 ]
             ]
@@ -97,17 +94,32 @@ class OrderTest extends TestCase
     public function test_creating_order_with_valid_product_payload_and_sufficient_quantities(): void
     {
         $customer = User::query()->latest()->first();
+        $merchant = User::query()->first();
+
+        $product = Product::query()->create([
+            'name' => 'Iphone 15 Pro Max',
+            'price' => 60000
+        ]);
+
+        $ingredient = Ingredient::query()->updateOrCreate([
+            'name'        => 'Adapter',
+        ],[
+            'merchant_id' => $merchant->id,
+            'stock_quantity' => 500,
+        ]);
+
+        $product->ingredients()->attach([$ingredient->id => ['amount' => 1]]);
 
         $response = $this->actingAs($customer)->post(self::API_URL . 'orders', [
             'products' => [
                 [
-                    'product_id' => 1,
-                    'quantity'   => 2,
+                    'product_id' => $product->id,
+                    'quantity'   => 20,
                 ]
             ]
         ]);
 
-        $latestOrder = Order::latest()->first();
+        $latestOrder = Order::latest('id')->first();
 
         $response->assertStatus(201);
         $response->assertJsonPath('order', (int) $latestOrder->order_number);
@@ -119,7 +131,7 @@ class OrderTest extends TestCase
         $customer = User::query()->latest()->first();
 
         $product = Product::query()->with('ingredients')->first();
-        $quantity = 1;
+        $quantity = rand(1, 5);
 
         $expectedAmounts = [];
         foreach ($product->ingredients as $ingredient) {
@@ -156,7 +168,7 @@ class OrderTest extends TestCase
             $this->assertEquals($expectedAmounts[$ingredientId]['consumed'], $actualAmount['consumed'], $expectedAmounts[$ingredientId]['name']);
         }
 
-        $latestOrder = Order::latest()->first();
+        $latestOrder = Order::latest('id')->first();
 
         $response->assertStatus(201);
         $response->assertJsonPath('order', (int) $latestOrder->order_number);

@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use Exception;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -16,7 +17,73 @@ class OrderService
 {
     const MAX_RETRIES = 3;
 
-    public function createOrderWithRetries($request) :array
+    public function process($request) :array
+    {
+        try {
+
+            $total = 0;
+            $items = [];
+
+            DB::beginTransaction();
+
+            foreach ($request->products as $productArray) {
+                $product = Product::query()->with('ingredients')->find($productArray['product_id']);
+
+                $quantity = $productArray['quantity'];
+
+                $total += $product->price * $quantity;
+
+                foreach ($product->ingredients as $productIngredient) {
+
+                    $isUpdated = $this->deductIngredientAmount($productIngredient, $quantity);
+
+                    if (!$isUpdated) {
+                        throw new Exception('Failed to update ingredient according to dirty reads');
+                    }
+                }
+
+                $items[] = [
+                    'product_id' => $product->id,
+                    'quantity'   => $quantity,
+                    'price'      => $product->price * $quantity,
+                ];
+            }
+
+            $order = $this->createOrder($total, $items);
+
+            if (!$order) {
+                throw new Exception('Failed to create order');
+            }
+
+            DB::commit();
+
+            return [
+                'status'   => Response::HTTP_CREATED,
+                'data'     => [
+                    'order'   => $order->order_number,
+                    'message' => 'order created successfully',
+                ],
+            ];
+        }catch (Exception $exception) {
+            Log::error('Failed to create order ', [
+                'reason'   => $exception->getMessage(),
+                'payload'  => [
+                    'products' => $request->products,
+                ]
+            ]);
+
+            DB::rollBack();
+        }
+
+        return [
+            'status'   => Response::HTTP_BAD_REQUEST,
+            'data'     => [
+                'error' => 'failed to create order'
+            ],
+        ];
+    }
+
+    public function processWithRetries($request) :array
     {
         $attempts = 1;
 
@@ -51,17 +118,11 @@ class OrderService
                     ];
                 }
 
-                $latestOrder = Order::query()->latest('id')->lockForUpdate()->first();
+                $order = $this->createOrder($total, $items);
 
-                $order = Order::query()->create([
-                    'customer_id'  => $request->user()->id,
-                    'order_number' => $latestOrder ? $latestOrder->order_number + 1 : 1000,
-                    'total_price'  => $total,
-                ]);
-
-                data_set($items, '*.order_id', $order->id);
-
-                OrderItem::query()->insert($items);
+                if (!$order) {
+                    throw new Exception('Failed to create order');
+                }
 
                 DB::commit();
 
@@ -94,79 +155,6 @@ class OrderService
             ],
         ];
     }
-    public function createOrder($request) :array
-    {
-        try {
-
-            $total = 0;
-            $items = [];
-
-            DB::beginTransaction();
-
-            foreach ($request->products as $productArray) {
-                $product = Product::query()->with('ingredients')->find($productArray['product_id']);
-
-                $quantity = $productArray['quantity'];
-
-                $total += $product->price * $quantity;
-
-                foreach ($product->ingredients as $productIngredient) {
-
-                    $isUpdated = $this->deductIngredientAmount($productIngredient, $quantity);
-
-                    if (!$isUpdated) {
-                        throw new Exception('Failed to update ingredient according to dirty reads');
-                    }
-                }
-
-                $items[] = [
-                    'product_id' => $product->id,
-                    'quantity'   => $quantity,
-                    'price'      => $product->price * $quantity,
-                ];
-            }
-
-            $latestOrder = Order::query()->latest('id')->lockForUpdate()->first();
-
-            $order = Order::query()->create([
-                //'customer_id'  => $request->user()->id,
-                'customer_id'  => 1,
-                'order_number' => $latestOrder ? $latestOrder->order_number + 1 : 1000,
-                'total_price'  => $total,
-            ]);
-
-            data_set($items, '*.order_id', $order->id);
-
-            OrderItem::query()->insert($items);
-
-            DB::commit();
-
-            return [
-                'status'   => Response::HTTP_CREATED,
-                'data'     => [
-                    'order'   => $order->order_number,
-                    'message' => 'order created successfully',
-                ],
-            ];
-        }catch (Exception $exception) {
-            Log::error('Failed to create order ', [
-                'reason'   => $exception->getMessage(),
-                'payload'  => [
-                    'products' => $request->products,
-                ]
-            ]);
-
-            DB::rollBack();
-        }
-
-        return [
-            'status'   => Response::HTTP_BAD_REQUEST,
-            'data'     => [
-                'error' => 'failed to create order'
-            ],
-        ];
-    }
-
 
     private function deductIngredientAmount($productIngredient, $quantity) :bool
     {
@@ -202,5 +190,36 @@ class OrderService
         }
 
         return true;
+    }
+
+    private function createOrder($total, $items) :Model|Order|null
+    {
+        if (!empty($items)) {
+            $order = Order::query()->create([
+                'customer_id'  => request()->user()->id,
+                'order_number' => $this->generateOrderNumber(),
+                'total_price'  => $total,
+            ]);
+
+            $this->saveOrderItems($order, $items);
+
+            return $order;
+        }
+
+        return null;
+    }
+
+    private function generateOrderNumber() :int
+    {
+        $latestOrder = Order::query()->latest('id')->lockForUpdate()->first();
+
+        return $latestOrder ? $latestOrder->order_number + 1 : config('esnaad.starting_order_number', 1000);
+    }
+
+    private function saveOrderItems($order, $items) :void
+    {
+        data_set($items, '*.order_id', $order->id);
+
+        OrderItem::query()->insert($items);
     }
 }

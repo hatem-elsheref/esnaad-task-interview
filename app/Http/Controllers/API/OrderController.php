@@ -12,7 +12,7 @@ class OrderController
 
     public function store(OrderRequest $request): JsonResponse
     {
-        $resource = $this->orderService->createOrder($request);
+        $resource = $this->orderService->process($request);
 
         return response()->json($resource['data'], $resource['status']);
     }
